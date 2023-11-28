@@ -51,6 +51,8 @@ import fr.paris.lutece.plugins.forms.export.ExportServiceManager;
 import fr.paris.lutece.plugins.workflow.modules.formspdf.business.FormsPDFTaskTemplate;
 import fr.paris.lutece.util.file.FileUtil;
 
+import javax.servlet.http.HttpServletRequest;
+
 public abstract class AbstractFileGenerator implements IFileGenerator
 {
     private static final String PATTERN_TIMESTAMP = "_yyyy-MM-dd-HH-mm-ss";
@@ -66,18 +68,21 @@ public abstract class AbstractFileGenerator implements IFileGenerator
 
     private List<FormExportConfig> _configList = null;
     protected Form _form;
+    protected HttpServletRequest _request;
 
     /**
      * Constructor
-     * 
+     *
      * @param _listFormResponseItems
+     * @param request
      */
-    protected AbstractFileGenerator( String fileName, String fileDescription, FormResponse formResponse, FormsPDFTaskTemplate formsPDFTaskTemplate )
+    protected AbstractFileGenerator(String fileName, String fileDescription, FormResponse formResponse, FormsPDFTaskTemplate formsPDFTaskTemplate, HttpServletRequest request)
     {
         _formResponse = formResponse;
         _fileName = StringUtils.substring( fileName, 0, MAX_NAME_LENGTH ) + LocalDateTime.now( ).format( DateTimeFormatter.ofPattern( PATTERN_TIMESTAMP ) );
         _fileDescription = fileDescription;
         _formsPDFTaskTemplate = formsPDFTaskTemplate;
+        _request = request;
     }
 
     @Override
