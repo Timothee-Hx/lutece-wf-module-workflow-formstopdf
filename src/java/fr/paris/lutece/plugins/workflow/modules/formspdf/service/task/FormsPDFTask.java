@@ -42,8 +42,7 @@ import fr.paris.lutece.plugins.forms.business.Form;
 import fr.paris.lutece.plugins.forms.business.FormHome;
 import fr.paris.lutece.plugins.forms.business.FormResponse;
 import fr.paris.lutece.plugins.forms.business.FormResponseHome;
-import fr.paris.lutece.plugins.workflow.modules.formspdf.business.FormsPDFTaskConfig;
-import fr.paris.lutece.plugins.workflow.modules.formspdf.business.FormsPDFTaskTemplateHome;
+import fr.paris.lutece.plugins.workflow.modules.formspdf.business.*;
 import fr.paris.lutece.plugins.workflow.modules.formspdf.service.HtmlToPDFGenerator;
 import fr.paris.lutece.plugins.workflowcore.business.resource.ResourceHistory;
 import fr.paris.lutece.plugins.workflowcore.service.config.ITaskConfigService;
@@ -54,14 +53,13 @@ import fr.paris.lutece.portal.business.user.AdminUser;
 import fr.paris.lutece.portal.service.admin.AdminUserService;
 import fr.paris.lutece.portal.service.i18n.I18nService;
 import fr.paris.lutece.portal.service.spring.SpringContextService;
-import fr.paris.lutece.portal.service.util.AppLogService;
+import fr.paris.lutece.portal.service.util.AppPathService;
 
 /**
  * @author norbert.le.garrec
  *
  */
-public class FormsPDFTask extends Task
-{
+public class FormsPDFTask extends Task {
 
     /**
      * The task title
@@ -82,8 +80,6 @@ public class FormsPDFTask extends Task
     @Override
     public void processTask( int nIdResourceHistory, HttpServletRequest request, Locale locale )
     {
-
-        // Get the resourceHistory to find the resource to work with
         ResourceHistory resourceHistory = _resourceHistoryService.findByPrimaryKey( nIdResourceHistory );
 
         // Get the task configuration
@@ -91,33 +87,33 @@ public class FormsPDFTask extends Task
 
         // Id of the Form to modify
         int nIdFormResponse = 0;
-        String strError = "";
-        try
-        {
-            nIdFormResponse = resourceHistory.getIdResource( );
 
-            FormResponse frep = FormResponseHome.findByPrimaryKey( nIdFormResponse );
-            Form form = FormHome.findByPrimaryKey( frep.getFormId( ) );
+        String strError = "";
+            try{
+            nIdFormResponse = resourceHistory.getIdResource();
+
+            FormResponse frep = FormResponseHome.findByPrimaryKey(nIdFormResponse);
+            Form form = FormHome.findByPrimaryKey(frep.getFormId());
 
             // TODO Gerer le cas null quand il s'agit d'une action automatique
             AdminUser user = null;
-            if ( request != null )
-            {
-                user = AdminUserService.getAdminUser( request );
+            if (request != null) {
+                user = AdminUserService.getAdminUser(request);
             }
-            
-            HtmlToPDFGenerator htmltopdf = new HtmlToPDFGenerator( form.getTitle( ), I18nService.getLocalizedString( PROPERTY_LABEL_DESCRIPTION, locale ), frep,
-            		FormsPDFTaskTemplateHome.findByPrimaryKey(formsPDFTaskConfig.getIdTemplate()) );
+            String baseUrl = AppPathService.getProdUrl(  request );
+        I18nService.getLocalizedString(PROPERTY_LABEL_DESCRIPTION, locale);
+            HtmlToPDFGenerator htmltopdf = new HtmlToPDFGenerator(form.getTitle(), I18nService.getLocalizedString(PROPERTY_LABEL_DESCRIPTION, locale), frep,
+                    FormsPDFTaskTemplateHome.findByPrimaryKey(formsPDFTaskConfig.getIdTemplate()),  baseUrl);
 
-            TemporaryFileGeneratorService.getInstance( ).generateFile( htmltopdf, user );
+            TemporaryFileGeneratorService.getInstance().generateFile(htmltopdf, user);
+        }
+            catch( Exception e )
+            {
+                strError = "Une erreur s'est produite lors de la generation de l'edition";
+                fr.paris.lutece.portal.service.util.AppLogService.error( strError, e );
+                throw new RuntimeException( strError, e );
+            }
 
-        }
-        catch( Exception e )
-        {
-            strError = "Une erreur s'est produite lors de la generation de l'edition";
-            AppLogService.error( strError, e );
-            throw new RuntimeException( strError, e );
-        }
 
     }
 

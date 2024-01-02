@@ -66,10 +66,11 @@ public abstract class AbstractFileGenerator implements IFileGenerator
 
     private List<FormExportConfig> _configList = null;
     protected Form _form;
+    protected String _baseUrl;
 
     /**
      * Constructor
-     * 
+     *
      * @param _listFormResponseItems
      */
     protected AbstractFileGenerator( String fileName, String fileDescription, FormResponse formResponse, FormsPDFTaskTemplate formsPDFTaskTemplate )
@@ -78,6 +79,20 @@ public abstract class AbstractFileGenerator implements IFileGenerator
         _fileName = StringUtils.substring( fileName, 0, MAX_NAME_LENGTH ) + LocalDateTime.now( ).format( DateTimeFormatter.ofPattern( PATTERN_TIMESTAMP ) );
         _fileDescription = fileDescription;
         _formsPDFTaskTemplate = formsPDFTaskTemplate;
+    }
+    /**
+     * Constructor
+     *
+     * @param _listFormResponseItems
+     * @param String
+     */
+    protected AbstractFileGenerator(String fileName, String fileDescription, FormResponse formResponse, FormsPDFTaskTemplate formsPDFTaskTemplate, String baseUrl)
+    {
+        _formResponse = formResponse;
+        _fileName = StringUtils.substring( fileName, 0, MAX_NAME_LENGTH ) + LocalDateTime.now( ).format( DateTimeFormatter.ofPattern( PATTERN_TIMESTAMP ) );
+        _fileDescription = fileDescription;
+        _formsPDFTaskTemplate = formsPDFTaskTemplate;
+        _baseUrl = baseUrl;
     }
 
     @Override

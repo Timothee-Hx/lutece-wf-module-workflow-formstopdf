@@ -39,19 +39,45 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Collection;
+import java.util.List;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.ArrayList;
 
+
+
+import fr.paris.lutece.plugins.forms.business.FormResponse;
+import fr.paris.lutece.plugins.forms.business.Question;
+import fr.paris.lutece.plugins.forms.business.QuestionHome;
 import fr.paris.lutece.plugins.forms.business.Form;
 import fr.paris.lutece.plugins.forms.business.FormHome;
+import fr.paris.lutece.plugins.forms.business.FormQuestionResponse;
+import fr.paris.lutece.plugins.forms.business.FormQuestionResponseHome;
+import fr.paris.lutece.plugins.forms.service.entrytype.EntryTypeCamera;
+import fr.paris.lutece.plugins.forms.service.entrytype.EntryTypeFile;
+import fr.paris.lutece.plugins.forms.service.entrytype.EntryTypeImage;
+import fr.paris.lutece.plugins.forms.service.entrytype.EntryTypeTermsOfService;
 import fr.paris.lutece.plugins.forms.service.provider.GenericFormsProvider;
+
+
+import fr.paris.lutece.plugins.genericattributes.business.Entry;
+import fr.paris.lutece.plugins.genericattributes.business.Response;
+import fr.paris.lutece.plugins.genericattributes.service.entrytype.AbstractEntryTypeComment;
+import fr.paris.lutece.plugins.genericattributes.service.entrytype.EntryTypeServiceManager;
+import fr.paris.lutece.plugins.genericattributes.service.entrytype.IEntryTypeService;
+import fr.paris.lutece.portal.business.file.FileHome;
+import fr.paris.lutece.portal.business.physicalfile.PhysicalFile;
+import fr.paris.lutece.portal.business.physicalfile.PhysicalFileHome;
+import fr.paris.lutece.portal.service.i18n.I18nService;
+import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Entities.EscapeMode;
 
-import fr.paris.lutece.plugins.forms.business.FormResponse;
 import fr.paris.lutece.plugins.html2pdf.service.PdfConverterService;
 import fr.paris.lutece.plugins.html2pdf.service.PdfConverterServiceException;
 import fr.paris.lutece.plugins.workflow.modules.formspdf.business.FormsPDFTaskTemplate;
@@ -67,7 +93,6 @@ import fr.paris.lutece.util.html.HtmlTemplate;
  */
 public class HtmlToPDFGenerator extends AbstractFileGenerator
 {
-
     /**
      * Instantiates a new html to PDF generator.
      *
@@ -85,11 +110,34 @@ public class HtmlToPDFGenerator extends AbstractFileGenerator
         super( fileName, fileDescription, formResponse, formsPDFTaskTemplate );
     }
 
+    /**
+     * Instantiates a new html to PDF generator.
+     *
+     * @param fileName
+     *            the file name
+     * @param fileDescription
+     *            the file description
+     * @param formResponse
+     *            the form response
+     * @param formsPDFTaskTemplate
+     *            the template
+     */
+    public HtmlToPDFGenerator( String fileName, String fileDescription, FormResponse formResponse, FormsPDFTaskTemplate formsPDFTaskTemplate, String baseUrl)
+    {
+        super( fileName, fileDescription, formResponse, formsPDFTaskTemplate, baseUrl);
+    }
+
     private static final boolean ZIP_EXPORT = Boolean.parseBoolean( AppPropertiesService.getProperty( "workflow-formspdf.export.pdf.zip", "false" ) );
     private static final String CONSTANT_MIME_TYPE_PDF = "application/pdf";
     private static final String CONSTANT_FORM_TITLE = "form_title";
     private static final String EXTENSION_PDF = ".pdf";
-    
+    private static final String KEY_LABEL_YES = "portal.util.labelYes";
+    private static final String KEY_LABEL_NO = "portal.util.labelNo";
+    private static final String LINK_MESSAGE_FO = "module.workflow.formspdf.task_formspdf_info.label.link_FO";
+    private static final String LINK_MESSAGE_BO = "module.workflow.formspdf.task_formspdf_info.label.link_BO";
+    private static final String PUBLISHED = "module.workflow.formspdf.task_formspdf_info.label.published";
+    private static final String NOT_PUBLISHED = "module.workflow.formspdf.task_formspdf_info.label.not_published";
+
 
     /**
      * Generate file.
@@ -114,7 +162,6 @@ public class HtmlToPDFGenerator extends AbstractFileGenerator
         File [ ] files = directoryFile.toFile( ).listFiles( ( File f ) -> f.getName( ).endsWith( EXTENSION_PDF ) );
         return files [0].toPath( );
     }
-
     /**
      * Gets the file name.
      *
@@ -160,6 +207,56 @@ public class HtmlToPDFGenerator extends AbstractFileGenerator
     }
 
     /**
+     * Form response list to hashmap.
+     * This method is used to get a list of form question response to a hashmap, including the responses with iterations in the form
+     * @param formQuestionResponseList
+     *           the form question response list
+     *           @return the hashmap
+     */
+    public  HashMap<Integer, FormQuestionResponse>  formResponseListToHashmap( List<FormQuestionResponse>  formQuestionResponseList)
+    {
+        HashMap<Integer, FormQuestionResponse> formResponseListByEntryId = new HashMap<>();
+        for (int i = 0; i < formQuestionResponseList.size(); i++)
+        {
+            int idEntry = formQuestionResponseList.get(i).getQuestion().getIdEntry();
+            if(formResponseListByEntryId.containsKey(idEntry))
+            {
+                // This is to add the response to the hashmap when there are iterations in the form (one than one time the same entry)
+                List <Response> presentResponses = formResponseListByEntryId.get(formQuestionResponseList.get(i).getQuestion().getIdEntry()).getEntryResponse();
+                List <Response> newResponses = formQuestionResponseList.get(i).getEntryResponse();
+                presentResponses.addAll(newResponses);
+                formQuestionResponseList.get(i).setEntryResponse(presentResponses);
+                formResponseListByEntryId.put(idEntry, formQuestionResponseList.get(i));
+            }
+            else
+            {
+                formResponseListByEntryId.put(idEntry, formQuestionResponseList.get(i));
+            }
+        }
+        return formResponseListByEntryId;
+    }
+    /**
+     * Fill template with form question response.
+     *
+     * @param template
+     *            the template
+     * @param formQuestionResponseList
+     *            the form question response list
+     * @param listQuestions
+     *            the list questions
+     * @return the html template
+     */
+    private HtmlTemplate fillTemplateWithFormQuestionResponse (String template, List<FormQuestionResponse> formQuestionResponseList, List<Question> listQuestions) {
+        Map<String, Object> model = new HashMap<>();
+        Form form = FormHome.findByPrimaryKey(_formsPDFTaskTemplate.getIdForm());
+        Collection<InfoMarker> collectionNotifyMarkers = GenericFormsProvider.getProviderMarkerDescriptions(form);
+        listQuestions.sort(Comparator.comparingInt(Question::getIdEntry));
+        model = markersToModel(model, collectionNotifyMarkers, formQuestionResponseList);
+        return AppTemplateService.getTemplateFromStringFtl(template, Locale.getDefault(), model);
+    }
+
+
+    /**
      * Write export file.
      *
      * @param directoryFile
@@ -169,22 +266,13 @@ public class HtmlToPDFGenerator extends AbstractFileGenerator
      */
     private void writeExportFile( Path directoryFile ) throws IOException
     {
-        Map<String, Object> model = new HashMap<>( );
         String strError = "";
-        // markers
-        Form form = FormHome.findByPrimaryKey( _formsPDFTaskTemplate.getIdForm());
-        Collection<InfoMarker> collectionNotifyMarkers = GenericFormsProvider.getProviderMarkerDescriptions(form);
-        
-        markersToModel(model, collectionNotifyMarkers);
-        
-        // add title
-        model.put( CONSTANT_FORM_TITLE , (form != null)?form.getTitle():"" );
-        
-        HtmlTemplate htmltemplate = AppTemplateService.getTemplateFromStringFtl(_formsPDFTaskTemplate.getContent(), Locale.getDefault( ), model);
-        
+        List<Question> listQuestions = QuestionHome.getListQuestionByIdForm(_formResponse.getFormId());
+        List<FormQuestionResponse> formQuestionResponseList = FormQuestionResponseHome.getFormQuestionResponseListByFormResponse( _formResponse.getId( ) );
+        HtmlTemplate htmlTemplate = fillTemplateWithFormQuestionResponse(_formsPDFTaskTemplate.getContent(), formQuestionResponseList, listQuestions);
         try ( OutputStream outputStream = Files.newOutputStream( directoryFile.resolve( generateFileName( _formResponse ) + ".pdf" ) ) )
         {
-            Document doc = Jsoup.parse( htmltemplate.getHtml( ), "UTF-8" );
+            Document doc = Jsoup.parse( htmlTemplate.getHtml( ), "UTF-8" );
             doc.outputSettings( ).syntax( Document.OutputSettings.Syntax.xml );
             doc.outputSettings( ).escapeMode( EscapeMode.base.xhtml );
             doc.outputSettings( ).charset( "UTF-8" );
@@ -195,23 +283,185 @@ public class HtmlToPDFGenerator extends AbstractFileGenerator
         {
             strError = "Une erreur s'est produite lors de la generation de l'edition";
             AppLogService.error( strError, e );
-            throw new RuntimeException( strError, e );
+           throw new RuntimeException( strError, e );
         }
         catch( IOException e )
         {
             strError = "Une erreur s'est produite lors de la generation de l'edition";
             AppLogService.error( strError, e );
-            throw new RuntimeException( strError, e );
+           throw new RuntimeException( strError, e );
         }
 
     }
-    
     private void markersToModel( Map<String, Object> model, Collection<InfoMarker> collectionInfoMarkers )
     {
         for ( InfoMarker infoMarker : collectionInfoMarkers )
         {
-            model.put( infoMarker.getMarker(), infoMarker.getValue() );           
+            model.put( infoMarker.getMarker(), infoMarker.getValue() );
         }
     }
 
+    private Map<String, Object> markersToModel( Map<String, Object> model, Collection<InfoMarker> collectionInfoMarkers, List<FormQuestionResponse> formQuestionResponseList )
+    {
+        HashMap<Integer, FormQuestionResponse> formResponseListByEntryId = formResponseListToHashmap(formQuestionResponseList);
+        String adminBaseUrl = "";
+        if(StringUtils.isBlank(AppPropertiesService.getProperty( "lutece.admin.prod.url" )))
+        {
+            adminBaseUrl = AppPropertiesService.getProperty( "lutece.admin.prod.url" );
+        }
+        else
+        {
+            AppLogService.info( "lutece.admin.prod.url property not found" );
+            adminBaseUrl = _baseUrl;
+        }
+        for ( InfoMarker infoMarker : collectionInfoMarkers )
+        {
+            model.put( infoMarker.getMarker(), infoMarker.getValue() );
+            if(infoMarker.getMarker().contains("position_"))
+            {
+                String position = infoMarker.getMarker().replace("position_", "");
+                int positionInt = Integer.parseInt(position);
+                List<String> responseValue = getResponseValue(formResponseListByEntryId.get(positionInt));
+
+                String responseValueString = "";
+                for (String response : responseValue)
+                {
+                    responseValueString += response + " ";
+                }
+                model.put( infoMarker.getMarker(), responseValueString );
+
+            }
+            if(infoMarker.getMarker().equals("url_admin_forms_response_detail"))
+            {
+                String linkMessage = I18nService.getLocalizedString( LINK_MESSAGE_BO, Locale.getDefault( ) );
+                model.put( infoMarker.getMarker(), "<a href=\""+ adminBaseUrl+"/jsp/admin/plugins/forms/ManageDirectoryFormResponseDetails.jsp?view=view_form_response_details&id_form_response=" + _formResponse.getId( ) + "\">" + linkMessage + "</a>" );
+            }
+            if(infoMarker.getMarker().equals("url_fo_forms_response_detail"))
+            {
+                String linkMessage = I18nService.getLocalizedString( LINK_MESSAGE_FO, Locale.getDefault( ) );
+                model.put( infoMarker.getMarker(), "<a href=\""+ _baseUrl+"/jsp/site/Portal.jsp?page=formsResponse&view=formResponseView&id_response=" + _formResponse.getId( ) + "\">" + linkMessage + "</a>" );
+            }
+            if(infoMarker.getMarker().equals("creation_date"))
+            {
+                String creationDate = _formResponse.getCreation( ).toLocalDateTime().toString();
+                String[] parts = creationDate.split("T");
+                String date = parts[0];
+                String time = parts[1];
+             model.put( infoMarker.getMarker(), date + " " + time );
+            }
+            if(infoMarker.getMarker().equals("update_date"))
+            {
+                String updateDate = _formResponse.getUpdate( ).toLocalDateTime().toString();
+                String[] parts = updateDate.split("T");
+                String date = parts[0];
+                String time = parts[1];
+                model.put( infoMarker.getMarker(), date + " " + time );
+            }
+            if(infoMarker.getMarker().equals("status"))
+            {
+                if(_formResponse.isPublished()) {
+                    String published = I18nService.getLocalizedString( PUBLISHED, Locale.getDefault( ) );
+                model.put( infoMarker.getMarker(), published );
+                } else {
+                    String notPublished = I18nService.getLocalizedString( NOT_PUBLISHED, Locale.getDefault( ) );
+                    model.put( infoMarker.getMarker(), notPublished );
+                }
+            }
+            if(infoMarker.getMarker().equals("update_date_status"))
+            {
+                String updateDate = _formResponse.getUpdateStatus( ).toLocalDateTime().toString();
+                String[] parts = updateDate.split("T");
+                String date = parts[0];
+                String time = parts[1];
+                model.put( infoMarker.getMarker(), date + " " + time );
+            }
+            if(infoMarker.getMarker().equals(CONSTANT_FORM_TITLE))
+            {
+                model.put( infoMarker.getMarker(), FormHome.findByPrimaryKey(_formResponse.getFormId()).getTitle());
+            }
+
+        }
+        return model;
+    }
+
+    /**
+     * Gets the response value.
+     *
+     * @param formQuestionResponse
+     *            the form question response
+     * @return List<String> response value
+     */
+    public List<String> getResponseValue( FormQuestionResponse formQuestionResponse )
+    {
+
+        IEntryTypeService entryTypeService ;
+        List<String> listResponseValue = new ArrayList<>( );
+        if(formQuestionResponse != null && formQuestionResponse.getQuestion( ) != null && formQuestionResponse.getQuestion( ).getEntry( ) != null && formQuestionResponse.getEntryResponse() != null)
+        {
+            Entry entry = formQuestionResponse.getQuestion( ).getEntry( );
+            entryTypeService = EntryTypeServiceManager.getEntryTypeService( entry );
+            if ( entryTypeService instanceof AbstractEntryTypeComment )
+            {
+                return listResponseValue;
+            }
+            if ( entryTypeService instanceof EntryTypeTermsOfService )
+            {
+                boolean aggrement = formQuestionResponse.getEntryResponse( ).stream( )
+                        .filter( response -> response.getField( ).getCode( ).equals( EntryTypeTermsOfService.FIELD_AGREEMENT_CODE ) )
+                        .map( Response::getResponseValue ).map( Boolean::valueOf ).findFirst( ).orElse( false );
+
+                if ( aggrement )
+                {
+                    listResponseValue.add( I18nService.getLocalizedString( KEY_LABEL_YES, I18nService.getDefaultLocale( ) ) );
+                }
+                else
+                {
+                    listResponseValue.add( I18nService.getLocalizedString( KEY_LABEL_NO, I18nService.getDefaultLocale( ) ) );
+                }
+                return listResponseValue;
+
+            }
+            for ( Response response : formQuestionResponse.getEntryResponse( ) )
+            {
+                if ((entryTypeService instanceof EntryTypeImage || entryTypeService instanceof EntryTypeCamera))
+                {
+                    PhysicalFile physicalFile = PhysicalFileHome.findByPrimaryKey(Integer.parseInt(response.getFile().getFileKey()));
+                    if (response.getFile() != null)
+                    {
+                        if (physicalFile != null)
+                        {
+                            String encoded = Base64.getEncoder().encodeToString(physicalFile.getValue());
+                            listResponseValue.add("<div style=\"margin-top: 10px; margin-bottom: 10px;\">"
+                                    + "<center><img src=\"data:image/jpeg;base64, " + encoded + " \" width=\"500px\" height=\"auto\" /></center> "
+                                    + "</div>"
+                            );
+                        } else {
+                            listResponseValue.add(StringUtils.EMPTY);
+                        }
+                    }
+                } else if (entryTypeService instanceof EntryTypeFile && response.getFile() != null)
+                {
+                    fr.paris.lutece.portal.business.file.File file = FileHome.findByPrimaryKey(Integer.parseInt(response.getFile().getFileKey()));
+                    if (file != null) {
+                        String space = "                ";
+                        String textInFileLink = file.getTitle() + space + file.getSize() + "Bytes" + space + file.getMimeType() + space + file.getDateCreation().toLocalDateTime().toString();
+                        String htmlDisplayFile = "<center><p>" + textInFileLink + "</p></center>";
+                        listResponseValue.add(htmlDisplayFile);
+                    }
+                }
+                else
+                {
+                    String strResponseValue = entryTypeService.getResponseValueForExport(entry, null, response, I18nService.getDefaultLocale());
+                    if (strResponseValue != null) {
+                        listResponseValue.add(strResponseValue);
+                    }
+                }
+            }
+        }
+        if(listResponseValue.isEmpty())
+        {
+            listResponseValue.add(StringUtils.EMPTY);
+        }
+        return listResponseValue;
+    }
 }
