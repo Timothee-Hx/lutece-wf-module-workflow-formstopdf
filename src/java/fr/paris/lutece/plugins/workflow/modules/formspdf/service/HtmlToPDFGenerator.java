@@ -131,12 +131,17 @@ public class HtmlToPDFGenerator extends AbstractFileGenerator
     private static final String CONSTANT_MIME_TYPE_PDF = "application/pdf";
     private static final String CONSTANT_FORM_TITLE = "form_title";
     private static final String EXTENSION_PDF = ".pdf";
-    private static final String KEY_LABEL_YES = "portal.util.labelYes";
-    private static final String KEY_LABEL_NO = "portal.util.labelNo";
-    private static final String LINK_MESSAGE_FO = "module.workflow.formspdf.task_formspdf_info.label.link_FO";
-    private static final String LINK_MESSAGE_BO = "module.workflow.formspdf.task_formspdf_info.label.link_BO";
-    private static final String PUBLISHED = "module.workflow.formspdf.task_formspdf_info.label.published";
-    private static final String NOT_PUBLISHED = "module.workflow.formspdf.task_formspdf_info.label.not_published";
+    private static final String TEMPLATE_ENTRY_IMAGE = "admin/plugins/workflow/modules/formspdf/entries/image.html";
+    private static final String TEMPLATE_ENTRY_FILE = "admin/plugins/workflow/modules/formspdf/entries/file.html";
+    private static final String TEMPLATE_ENTRY_TERMS_OF_SERVICE = "admin/plugins/workflow/modules/formspdf/entries/terms_of_service.html";
+    private static final String TEMPLATE_PUBLISHED_STATUS = "admin/plugins/workflow/modules/formspdf/published_status.html";
+    private static final String MARK_ENTRY_IMAGE = "mark_entry_image";
+    private static final String MARK_FILE_TITLE = "mark_file_title";
+    private static final String MARK_FILE_SIZE = "mark_file_size";
+    private static final String MARK_FILE_MIME_TYPE = "mark_file_mime_type";
+    private static final String MARK_FILE_DATE_CREATION = "mark_file_date_creation";
+    private static final String MARK_TERMS_OF_SERVICE_AGREED = "terms_of_service_agreed";
+    private static final String MARK_PUBLISHED_STATUS = "published_status";
 
 
     /**
@@ -251,7 +256,7 @@ public class HtmlToPDFGenerator extends AbstractFileGenerator
         Form form = FormHome.findByPrimaryKey(_formsPDFTaskTemplate.getIdForm());
         Collection<InfoMarker> collectionNotifyMarkers = GenericFormsProvider.getProviderMarkerDescriptions(form);
         listQuestions.sort(Comparator.comparingInt(Question::getIdEntry));
-        model = markersToModel(model, collectionNotifyMarkers, formQuestionResponseList);
+        model = markersToModel(model, collectionNotifyMarkers, formQuestionResponseList, form.getTitle());
         return AppTemplateService.getTemplateFromStringFtl(template, Locale.getDefault(), model);
     }
 
@@ -301,19 +306,10 @@ public class HtmlToPDFGenerator extends AbstractFileGenerator
         }
     }
 
-    private Map<String, Object> markersToModel( Map<String, Object> model, Collection<InfoMarker> collectionInfoMarkers, List<FormQuestionResponse> formQuestionResponseList )
+    private Map<String, Object> markersToModel( Map<String, Object> model, Collection<InfoMarker> collectionInfoMarkers, List<FormQuestionResponse> formQuestionResponseList, String formTitle )
     {
         HashMap<Integer, FormQuestionResponse> formResponseListByEntryId = formResponseListToHashmap(formQuestionResponseList);
-        String adminBaseUrl = "";
-        if(StringUtils.isBlank(AppPropertiesService.getProperty( "lutece.admin.prod.url" )))
-        {
-            adminBaseUrl = AppPropertiesService.getProperty( "lutece.admin.prod.url" );
-        }
-        else
-        {
-            AppLogService.info( "lutece.admin.prod.url property not found" );
-            adminBaseUrl = _baseUrl;
-        }
+        String adminBaseUrl = _baseUrl;
         for ( InfoMarker infoMarker : collectionInfoMarkers )
         {
             model.put( infoMarker.getMarker(), infoMarker.getValue() );
@@ -333,51 +329,38 @@ public class HtmlToPDFGenerator extends AbstractFileGenerator
             }
             if(infoMarker.getMarker().equals("url_admin_forms_response_detail"))
             {
-                String linkMessage = I18nService.getLocalizedString( LINK_MESSAGE_BO, Locale.getDefault( ) );
-                model.put( infoMarker.getMarker(), "<a href=\""+ adminBaseUrl+"/jsp/admin/plugins/forms/ManageDirectoryFormResponseDetails.jsp?view=view_form_response_details&id_form_response=" + _formResponse.getId( ) + "\">" + linkMessage + "</a>" );
+                model.put( infoMarker.getMarker(), adminBaseUrl+"/jsp/admin/plugins/forms/ManageDirectoryFormResponseDetails.jsp?view=view_form_response_details&id_form_response=" + _formResponse.getId( ) );
             }
             if(infoMarker.getMarker().equals("url_fo_forms_response_detail"))
             {
-                String linkMessage = I18nService.getLocalizedString( LINK_MESSAGE_FO, Locale.getDefault( ) );
-                model.put( infoMarker.getMarker(), "<a href=\""+ _baseUrl+"/jsp/site/Portal.jsp?page=formsResponse&view=formResponseView&id_response=" + _formResponse.getId( ) + "\">" + linkMessage + "</a>" );
+                model.put( infoMarker.getMarker(), _baseUrl+"/jsp/site/Portal.jsp?page=formsResponse&view=formResponseView&id_response=" + _formResponse.getId( ) );
             }
             if(infoMarker.getMarker().equals("creation_date"))
             {
-                String creationDate = _formResponse.getCreation( ).toLocalDateTime().toString();
-                String[] parts = creationDate.split("T");
-                String date = parts[0];
-                String time = parts[1];
-             model.put( infoMarker.getMarker(), date + " " + time );
+             model.put( infoMarker.getMarker(), _formResponse.getCreation( ) );
             }
             if(infoMarker.getMarker().equals("update_date"))
             {
-                String updateDate = _formResponse.getUpdate( ).toLocalDateTime().toString();
-                String[] parts = updateDate.split("T");
-                String date = parts[0];
-                String time = parts[1];
-                model.put( infoMarker.getMarker(), date + " " + time );
+                model.put( infoMarker.getMarker(),  _formResponse.getUpdate( ) );
             }
             if(infoMarker.getMarker().equals("status"))
             {
+                Map<String, Boolean> modelPublishedStatus = new HashMap<>();
                 if(_formResponse.isPublished()) {
-                    String published = I18nService.getLocalizedString( PUBLISHED, Locale.getDefault( ) );
-                model.put( infoMarker.getMarker(), published );
+                    modelPublishedStatus.put( MARK_PUBLISHED_STATUS, true );
                 } else {
-                    String notPublished = I18nService.getLocalizedString( NOT_PUBLISHED, Locale.getDefault( ) );
-                    model.put( infoMarker.getMarker(), notPublished );
+                    modelPublishedStatus.put( MARK_PUBLISHED_STATUS, false );
                 }
+                HtmlTemplate template = AppTemplateService.getTemplate( TEMPLATE_PUBLISHED_STATUS, Locale.getDefault(), modelPublishedStatus );
+                model.put( infoMarker.getMarker(), template.getHtml() );
             }
             if(infoMarker.getMarker().equals("update_date_status"))
             {
-                String updateDate = _formResponse.getUpdateStatus( ).toLocalDateTime().toString();
-                String[] parts = updateDate.split("T");
-                String date = parts[0];
-                String time = parts[1];
-                model.put( infoMarker.getMarker(), date + " " + time );
+                model.put( infoMarker.getMarker(),  _formResponse.getUpdateStatus( ) );
             }
             if(infoMarker.getMarker().equals(CONSTANT_FORM_TITLE))
             {
-                model.put( infoMarker.getMarker(), FormHome.findByPrimaryKey(_formResponse.getFormId()).getTitle());
+                model.put( infoMarker.getMarker(), formTitle);
             }
 
         }
@@ -409,17 +392,18 @@ public class HtmlToPDFGenerator extends AbstractFileGenerator
                 boolean aggrement = formQuestionResponse.getEntryResponse( ).stream( )
                         .filter( response -> response.getField( ).getCode( ).equals( EntryTypeTermsOfService.FIELD_AGREEMENT_CODE ) )
                         .map( Response::getResponseValue ).map( Boolean::valueOf ).findFirst( ).orElse( false );
-
+                Map<String, Boolean> model = new HashMap<>();
                 if ( aggrement )
                 {
-                    listResponseValue.add( I18nService.getLocalizedString( KEY_LABEL_YES, I18nService.getDefaultLocale( ) ) );
+                    model.put(MARK_TERMS_OF_SERVICE_AGREED, true);
                 }
                 else
                 {
-                    listResponseValue.add( I18nService.getLocalizedString( KEY_LABEL_NO, I18nService.getDefaultLocale( ) ) );
+                    model.put(MARK_TERMS_OF_SERVICE_AGREED, false);
                 }
+                HtmlTemplate template = AppTemplateService.getTemplate( TEMPLATE_ENTRY_TERMS_OF_SERVICE, Locale.getDefault(), model );
+                listResponseValue.add( template.getHtml());
                 return listResponseValue;
-
             }
             for ( Response response : formQuestionResponse.getEntryResponse( ) )
             {
@@ -431,10 +415,10 @@ public class HtmlToPDFGenerator extends AbstractFileGenerator
                         if (physicalFile != null)
                         {
                             String encoded = Base64.getEncoder().encodeToString(physicalFile.getValue());
-                            listResponseValue.add("<div style=\"margin-top: 10px; margin-bottom: 10px;\">"
-                                    + "<center><img src=\"data:image/jpeg;base64, " + encoded + " \" width=\"500px\" height=\"auto\" /></center> "
-                                    + "</div>"
-                            );
+                            Map<String, String> model = new HashMap<>();
+                            model.put(MARK_ENTRY_IMAGE, "data:image/jpeg;base64,"+encoded);
+                            HtmlTemplate template = AppTemplateService.getTemplate( TEMPLATE_ENTRY_IMAGE, Locale.getDefault(), model );
+                            listResponseValue.add(template.getHtml() );
                         } else {
                             listResponseValue.add(StringUtils.EMPTY);
                         }
@@ -443,10 +427,13 @@ public class HtmlToPDFGenerator extends AbstractFileGenerator
                 {
                     fr.paris.lutece.portal.business.file.File file = FileHome.findByPrimaryKey(Integer.parseInt(response.getFile().getFileKey()));
                     if (file != null) {
-                        String space = "                ";
-                        String textInFileLink = file.getTitle() + space + file.getSize() + "Bytes" + space + file.getMimeType() + space + file.getDateCreation().toLocalDateTime().toString();
-                        String htmlDisplayFile = "<center><p>" + textInFileLink + "</p></center>";
-                        listResponseValue.add(htmlDisplayFile);
+                        Map<String, String> model = new HashMap<>();
+                        model.put(MARK_FILE_TITLE, file.getTitle());
+                        model.put(MARK_FILE_SIZE, file.getSize() + " " + "bytes");
+                        model.put(MARK_FILE_MIME_TYPE, file.getMimeType());
+                        model.put(MARK_FILE_DATE_CREATION, file.getDateCreation().toLocalDateTime().toString());
+                        HtmlTemplate template = AppTemplateService.getTemplate( TEMPLATE_ENTRY_FILE, Locale.getDefault(), model );
+                        listResponseValue.add(template.getHtml());
                     }
                 }
                 else
