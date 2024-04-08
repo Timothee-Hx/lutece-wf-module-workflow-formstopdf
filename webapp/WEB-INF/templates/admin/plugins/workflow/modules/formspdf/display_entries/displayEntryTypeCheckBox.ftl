@@ -10,7 +10,6 @@ Parameters: entry, list_responses
 				<#list list_responses as response>
 					<p>
 						<#if response.field??>${response.field.title!''}</#if>
-					<#--image url deleted-->
 					</p>
 				</#list>
 			</#if>
