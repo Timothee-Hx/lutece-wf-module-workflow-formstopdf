@@ -67,7 +67,7 @@ Parameters: q (forms.FormQuestionResponse) - The form question response
         <#elseif entry.entryType.beanName == "forms.entryTypeSelectOrder">
             <@displayEntryTypeSelectOrder entry=entry list_responses=list_responses  />
         <#elseif entry.entryType.beanName == "forms.entryTypeTelephoneNumber">
-            <@displayEntryTypeTelephoneNumber entry=entry list_responses=list_responses  />
+            <@displayEntryTypeTelephone entry=entry list_responses=list_responses  />
         <#elseif entry.entryType.beanName == "forms.entryTypeTermsOfService">
             <@displayEntryTypeTermsOfService entry=entry list_responses=list_responses  />
         <#elseif entry.entryType.beanName == "forms.entryTypeText">
