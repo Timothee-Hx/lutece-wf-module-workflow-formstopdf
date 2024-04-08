@@ -6,7 +6,9 @@ Parameters: entry, list_responses
 <#macro displayEntryTypeComment entry, list_responses >
 		<div>
 			<div>
-				<p>${entry.comment}</p>
+				<#if entry.comment?exists>
+						<p>${entry.comment}</p>
+				</#if>
 			</div>
 		</div>
 </#macro>
